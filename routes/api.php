@@ -36,11 +36,6 @@ Route::middleware('jwt.auth')->group(function () {
     Route::post('/logout', LogoutController::class)->name('logout');
 
     // game
-    // Route::get('/quests', [GameController::class, 'index']);
-    // Route::get('/quests/{id}/questions', [GameController::class, 'getQuestions']);
-    // Route::post('/submit', [GameController::class, 'submitAnswers']);
-    // Route::get('/result', [GameController::class, 'getResult']);
-
     Route::get('/game/start', [GameController::class, 'start'])->name('game.start');
     Route::get('/game/question/{level}/{questionNumber}', [GameController::class, 'getQuestion'])->name('game.question');
     Route::post('/game/submit-answer', [GameController::class, 'submitAnswer'])->name('game.submit-answer');

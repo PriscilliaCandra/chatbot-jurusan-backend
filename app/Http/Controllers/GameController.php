@@ -174,8 +174,8 @@ class GameController extends Controller
 
         return response()->json([
             'personality_type' => $result->personality_type,
-            'personality_description' => $result->personality_description,
-            'recommended_majors' => $result->recommended_majors
+            'personality_description' => $result->personality_description, // Pastikan kolom ini ada jika digunakan
+            'recommended_majors' => json_decode($result->recommended_majors) // Decode JSON string kembali menjadi array
         ]);
     }
 }

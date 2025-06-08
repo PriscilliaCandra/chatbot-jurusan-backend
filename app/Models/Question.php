@@ -20,6 +20,10 @@ class Question extends Model
         'question_order'
     ];
 
+    // Pastikan Anda juga menambahkan ini agar 'options' disertakan dalam output JSON
+    protected $appends = ['options'];
+
+    // Accessor untuk mendapatkan opsi dalam format array asosiatif
     public function getOptionsAttribute()
     {
         return [
