@@ -17,7 +17,7 @@ class ChatBotController extends Controller
         $msg = $request->input('message');
         // Jika mau gunakan user login, aktifkan ini:
         // $userId = auth()->id();
-        $userId = 1;  // sementara pakai user 1
+        $userId = 1; 
 
         // Simpan pesan user ke chat history
         ChatHistory::create([
@@ -35,9 +35,9 @@ class ChatBotController extends Controller
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
 
         $postData = json_encode([
-            'model' => 'tinyllama', // sesuaikan model yang kamu gunakan
+            'model' => 'tinyllama', 
             'prompt' => $msg,
-            'stream' => false, // kalau pakai stream, perlu logika lain
+            'stream' => false, 
         ]);
 
         curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);

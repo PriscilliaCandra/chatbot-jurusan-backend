@@ -6,6 +6,7 @@ use App\Models\Question;
 use App\Models\UserResult;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Models\UserAnswer;
 
 class GameController extends Controller
 {
@@ -38,15 +39,28 @@ class GameController extends Controller
             'answer' => 'required|in:A,B,C,D,E'
         ]);
 
-        // Store answer in session
-        $answers = session('answers', []);
-        $answers[$request->level][$request->question_number] = $request->answer;
-        session(['answers' => $answers]);
+        $userId = Auth::id();
 
-        // Check if this was the last question
-        if ($request->question_number == 12 && $request->level == 3) {
-            return $this->calculateResult();
-        }
+        $question = Question::where('level', $request->level)
+                            ->where('question_order', $request->question_number)
+                            ->first();
+
+        // Store answer in session
+        // $answers = session('answers', []);
+        // $answers[$request->level][$request->question_number] = $request->answer;
+        // session(['answers' => $answers]);
+
+        UserAnswer::updateOrCreate(
+            [
+                'user_id' => $userId,
+                'question_id' => $question->id,
+            ],
+            [
+                'level' => $request->level,
+                'question_order' => $request->question_number,
+                'answer_choice' => $request->answer,
+            ]
+        );
 
         // Return next question
         $nextQuestionNumber = $request->question_number + 1;
@@ -57,6 +71,11 @@ class GameController extends Controller
             $nextLevel = $request->level;
         }
 
+        // Check if this was the last question
+        if ($request->question_number == 12 && $request->level == 3) {
+            return $this->calculateResult();
+        }
+
         return response()->json([
             'next_level' => $nextLevel,
             'next_question' => $nextQuestionNumber
@@ -65,7 +84,10 @@ class GameController extends Controller
 
     private function calculateResult()
     {
-        $answers = session('answers', []);
+        $userId = Auth::id();
+        $userAnswers = UserAnswer::where('user_id', $userId)->get();
+
+        // $answers = session('answers', []);
         $scores = [
             'A' => 0,
             'B' => 0,
@@ -75,9 +97,10 @@ class GameController extends Controller
         ];
 
         // Calculate scores
-        foreach ($answers as $level => $levelAnswers) {
-            foreach ($levelAnswers as $answer) {
-                $scores[$answer]++;
+        foreach ($userAnswers as $userAnswer) {
+            $answerChoice = $userAnswer->answer_choice;
+            if (isset($scores[$answerChoice])) {
+                $scores[$answerChoice]++;
             }
         }
 
@@ -135,17 +158,22 @@ class GameController extends Controller
             }
         }
 
+        $finalPersonalityType = implode(' & ', $personalityTypes);
+        $finalRecommendedMajors = array_values(array_unique(array_merge(...$recommendedMajors)));
+
         // Save result if user is logged in
         if (Auth::check()) {
             UserResult::create([
-                'user_id' => Auth::id(),
-                'score_a' => $scores['A'],
-                'score_b' => $scores['B'],
-                'score_c' => $scores['C'],
-                'score_d' => $scores['D'],
-                'score_e' => $scores['E'],
-                'personality_type' => implode(' & ', $personalityTypes),
-                'recommended_majors' => array_unique(array_merge(...$recommendedMajors))
+                ['user_id' => $userId],
+                [
+                    'score_a' => $scores['A'] ?? 0,
+                    'score_b' => $scores['B'] ?? 0,
+                    'score_c' => $scores['C'] ?? 0,
+                    'score_d' => $scores['D'] ?? 0,
+                    'score_e' => $scores['E'] ?? 0,
+                    'personality_type' => $finalPersonalityType,
+                    'recommended_majors' => json_encode($finalRecommendedMajors) // Simpan sebagai JSON string
+                ]
             ]);
         }
 
@@ -174,8 +202,8 @@ class GameController extends Controller
 
         return response()->json([
             'personality_type' => $result->personality_type,
-            'personality_description' => $result->personality_description, // Pastikan kolom ini ada jika digunakan
-            'recommended_majors' => json_decode($result->recommended_majors) // Decode JSON string kembali menjadi array
+            'personality_description' => $result->personality_description, 
+            'recommended_majors' => json_decode($result->recommended_majors) 
         ]);
     }
 }
