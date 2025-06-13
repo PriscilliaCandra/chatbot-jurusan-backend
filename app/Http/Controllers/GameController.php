@@ -163,9 +163,9 @@ class GameController extends Controller
 
         // Save result if user is logged in
         if (Auth::check()) {
-            UserResult::create([
-                ['user_id' => $userId],
+            UserResult::create(
                 [
+                    'user_id' => $userId,
                     'score_a' => $scores['A'] ?? 0,
                     'score_b' => $scores['B'] ?? 0,
                     'score_c' => $scores['C'] ?? 0,
@@ -174,7 +174,7 @@ class GameController extends Controller
                     'personality_type' => $finalPersonalityType,
                     'recommended_majors' => json_encode($finalRecommendedMajors) // Simpan sebagai JSON string
                 ]
-            ]);
+            );
         }
 
         // Clear session
