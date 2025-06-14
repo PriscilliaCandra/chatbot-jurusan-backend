@@ -23,22 +23,26 @@ use App\Http\Controllers\Api\LogoutController;
 Route::post('/register', RegisterController::class)->name('register');
 Route::post('/login', LoginController::class)->name('login');
 
-// Route::post('/ask', [ChatBotController::class, 'ask']);
-
-
 // Protected routes
 Route::middleware('jwt.auth')->group(function () {
     // authentikasi
-    Route::post('/ask', [ChatBotController::class, 'ask']);
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
     Route::post('/logout', LogoutController::class)->name('logout');
 
-    // game
-    Route::get('/game/start', [GameController::class, 'start'])->name('game.start');
-    Route::get('/game/question/{level}/{questionNumber}', [GameController::class, 'getQuestion'])->name('game.question');
-    Route::post('/game/submit-answer', [GameController::class, 'submitAnswer'])->name('game.submit-answer');
-    Route::get('/game/result', [GameController::class, 'getResult'])->name('game.result');
+    // chatbot routes
+    Route::prefix('chatbot')->group(function () {
+        Route::post('/ask', [ChatBotController::class, 'ask'])->name('chatbot.ask');
+        Route::get('/questions', [ChatBotController::class, 'getAvailableQuestions'])->name('chatbot.questions');
+    });
+
+    // game routes
+    Route::prefix('game')->group(function () {
+        Route::get('/start', [GameController::class, 'start'])->name('game.start');
+        Route::get('/question/{level}/{questionNumber}', [GameController::class, 'getQuestion'])->name('game.question');
+        Route::post('/submit-answer', [GameController::class, 'submitAnswer'])->name('game.submit-answer');
+        Route::get('/result', [GameController::class, 'getResult'])->name('game.result');
+    });
 });
 
