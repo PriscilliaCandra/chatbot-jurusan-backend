@@ -42,7 +42,6 @@ class ChatBotController extends Controller
 
             return response()->json([
                 'reply' => $reply,
-                'suggested_questions' => [],
                 'needs_personality_test' => true
             ]);
         }
@@ -50,25 +49,135 @@ class ChatBotController extends Controller
         // Dapatkan tipe kepribadian dominan
         $personalityTypes = $this->getDominantPersonalityTypes($userResult);
         
-        // Cari pertanyaan yang cocok dengan algoritma yang lebih baik
-        $question = $this->findBestMatchingQuestion($msg, $personalityTypes);
+        // Prepare prompt with personality context
+        $personalityContext = implode(' dan ', array_keys($personalityTypes));
+        $prompt = "Anda adalah asisten chatbot yang membantu memberikan informasi dan saran tentang perkuliahan. 
+                  User memiliki tipe kepribadian {$personalityContext}. 
+                  
+                  INSTRUKSI:
+                  1. Berikan jawaban yang JELAS, SINGKAT, dan LANGSUNG ke inti pertanyaan
+                  2. Sesuaikan jawaban dengan tipe kepribadian user
+                  3. Gunakan bahasa yang mudah dipahami
+                  4. Fokus pada informasi yang berguna dan praktis
+                  5. JANGAN memberikan jawaban yang bertele-tele atau tidak relevan
+                  
+                  KARAKTERISTIK TIPE KEPRIBADIAN:
+                  - Logis: 
+                    * Suka dengan angka, analisis, dan pemecahan masalah
+                    * Belajar efektif melalui: latihan soal, praktikum, proyek sistematis
+                    * Cocok dengan: jurusan teknik, sains, komputer, ekonomi
+                    * Tips belajar: buat jadwal terstruktur, fokus pada pemahaman konsep
+                  
+                  - Strategis:
+                    * Suka dengan perencanaan dan manajemen
+                    * Belajar efektif melalui: studi kasus, simulasi, proyek manajemen
+                    * Cocok dengan: jurusan manajemen, bisnis, administrasi
+                    * Tips belajar: buat rencana jangka panjang, evaluasi berkala
+                  
+                  PERTANYAAN USER: {$msg}
+                  
+                  JAWABAN ANDA HARUS:
+                  1. Langsung menjawab pertanyaan user
+                  2. Sesuaikan dengan tipe kepribadian {$personalityContext}
+                  3. Berikan contoh konkret dan praktis
+                  4. Maksimal 3-4 paragraf
+                  5. Gunakan bahasa yang mudah dipahami";
 
-        if ($question) {
-            $reply = $question->answer;
-        } else {
-            $reply = "Maaf, saya tidak mengerti pertanyaan Anda. Silakan pilih pertanyaan dari daftar yang tersedia.";
+        // Setup cURL untuk streaming
+        $ch = curl_init();
+
+        curl_setopt($ch, CURLOPT_URL, 'http://localhost:11434/api/generate');
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 120); 
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10); // Set connection timeout 10 detik
+
+        // JSON payload dengan streaming aktif
+        $postData = json_encode([
+            'model' => 'zephyr:7b-beta',
+            'prompt' => $prompt,
+            'stream' => true,
+            'temperature' => 0.7,
+            'max_tokens' => 1000
+        ]);
+
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+
+        // Log request untuk debugging
+        \Log::info('Sending request to Zephyr API', [
+            'prompt' => $prompt,
+            'postData' => $postData
+        ]);
+
+        // Eksekusi cURL dan simpan stream ke dalam satu string
+        $fullResponse = '';
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use (&$fullResponse) {
+            $lines = explode("\n", $data);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                
+                // Log raw response untuk debugging
+                \Log::debug('Raw response line', ['line' => $line]);
+                
+                // Hapus prefix "data:" jika ada
+                if (str_starts_with($line, "data:")) {
+                    $line = trim(substr($line, 5));
+                }
+                
+                // Decode dan ambil konten 'response'
+                if ($line && str_starts_with($line, "{")) {
+                    $json = json_decode($line, true);
+                    if (isset($json['response'])) {
+                        $fullResponse .= $json['response'];
+                        // Log successful response parsing
+                        \Log::debug('Parsed response', ['response' => $json['response']]);
+                    }
+                }
+            }
+            return strlen($data);
+        });
+
+        $response = curl_exec($ch);
+
+        if ($response === false) {
+            $error = curl_error($ch);
+            $errno = curl_errno($ch);
+            curl_close($ch);
+            
+            // Log error details
+            \Log::error('Curl Error', [
+                'error' => $error,
+                'errno' => $errno,
+                'url' => 'http://localhost:11434/api/generate'
+            ]);
+            
+            return response()->json([
+                'error' => 'Curl Error: ' . $error,
+                'details' => 'Error number: ' . $errno
+            ], 500);
+        }
+
+        curl_close($ch);
+
+        // Log final response
+        \Log::info('Final response from Zephyr', ['response' => $fullResponse]);
+
+        // Jika tidak ada response, berikan pesan default
+        if (empty($fullResponse)) {
+            \Log::warning('Empty response from Zephyr API');
+            $fullResponse = "Maaf, saya mengalami kesulitan dalam memproses pertanyaan Anda. Silakan coba tanyakan kembali dengan cara yang berbeda.";
         }
 
         // Simpan balasan bot
         ChatHistory::create([
             'user_id' => $userId,
             'sender' => 'bot',
-            'message' => $reply,
+            'message' => $fullResponse,
         ]);
 
         return response()->json([
-            'reply' => $reply,
-            'suggested_questions' => $this->getSuggestedQuestions($personalityTypes)
+            'reply' => $fullResponse
         ]);
     }
 
@@ -94,87 +203,24 @@ class ChatBotController extends Controller
         });
     }
 
-    private function findBestMatchingQuestion($message, $personalityTypes)
+    public function history()
     {
-        // Normalisasi pesan
-        $message = $this->normalizeText($message);
-        
-        $bestMatch = null;
-        $highestSimilarity = 0;
-        
-        // Cari pertanyaan untuk setiap tipe kepribadian dominan
-        foreach ($personalityTypes as $type => $score) {
-            $questions = ChatbotQuestion::where('personality_type', $type)->get();
-            
-            foreach ($questions as $question) {
-                $questionText = $this->normalizeText($question->questions);
-                
-                // Hitung similarity menggunakan similar_text
-                similar_text($message, $questionText, $percent);
-                
-                // Tambahkan bonus berdasarkan skor kepribadian
-                $bonus = ($score / 10) * 5; // Bonus maksimal 5%
-                $finalScore = $percent + $bonus;
-                
-                if ($finalScore > $highestSimilarity && $finalScore > 60) {
-                    $highestSimilarity = $finalScore;
-                    $bestMatch = $question;
-                }
-            }
+        $user = auth()->user();
+
+        if(!$user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
-        return $bestMatch;
-    }
 
-    private function normalizeText($text)
-    {
-        // Convert ke lowercase
-        $text = strtolower($text);
-        
-        // Hapus tanda baca
-        $text = preg_replace('/[^\p{L}\p{N}\s]/u', '', $text);
-        
-        // Hapus extra spaces
-        $text = preg_replace('/\s+/', ' ', $text);
-        
-        // Trim
-        return trim($text);
-    }
-
-    private function getSuggestedQuestions($personalityTypes)
-    {
-        $questions = collect();
-        
-        // Ambil pertanyaan untuk setiap tipe kepribadian dominan
-        foreach ($personalityTypes as $type => $score) {
-            $typeQuestions = ChatbotQuestion::where('personality_type', $type)
-                ->inRandomOrder()
-                ->limit(3)
-                ->get(['id', 'questions']);
-                
-            $questions = $questions->concat($typeQuestions);
-        }
-        
-        return $questions->shuffle()->take(5);
-    }
-
-    // Endpoint untuk mendapatkan pertanyaan yang tersedia
-    public function getAvailableQuestions()
-    {
-        $userResult = UserResult::where('user_id', auth()->id())
+        $history = ChatHistory::where('user_id', $user->id)
             ->latest()
-            ->first();
+            ->get(['sender', 'message', 'created_at']);
 
-        if (!$userResult) {
-            return response()->json([
-                'message' => 'Anda belum melakukan tes kepribadian',
-                'questions' => []
-            ], 400);
-        }
+        return response()->json($history);
+    }
 
-        $personalityTypes = $this->getDominantPersonalityTypes($userResult);
-        $questions = $this->getSuggestedQuestions($personalityTypes);
-
-        return response()->json($questions);
+    public function logout(Request $request)
+    {
+        JWTAuth::invalidate(JWTAuth::getToken());
+        return response()->json(['message' => 'Successfully logged out']);
     }
 }

@@ -35,19 +35,6 @@
                         }"
                         class="max-w-[75%] p-3 shadow-sm text-sm">
                         <p>{{ msg.message }}</p>
-                        <!-- Tampilkan pertanyaan saran jika ada -->
-                        <div v-if="msg.sender === 'bot' && msg.suggestedQuestions && msg.suggestedQuestions.length > 0" 
-                             class="mt-2 space-y-2">
-                            <p class="text-xs text-gray-600">Pertanyaan yang mungkin Anda tanyakan:</p>
-                            <div class="flex flex-wrap gap-2">
-                                <button v-for="(question, qIndex) in msg.suggestedQuestions" 
-                                        :key="qIndex"
-                                        @click="useSuggestedQuestion(question.questions)"
-                                        class="text-xs bg-white bg-opacity-20 hover:bg-opacity-30 px-2 py-1 rounded-full transition-all">
-                                    {{ question.questions }}
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div v-if="isTyping" class="flex justify-start">
@@ -90,7 +77,7 @@ export default {
             chatHistory: [],
             newMessage: '',
             isTyping: false,
-            availableQuestions: [] // Menyimpan daftar pertanyaan yang tersedia
+            availableQuestions: []
         };
     },
     methods: {
@@ -124,6 +111,11 @@ export default {
 
                 const botReply = response.data.reply;
                 this.chatHistory.push({ sender: 'bot', message: botReply });
+
+                // Update suggested questions if available
+                if (response.data.suggested_questions) {
+                    this.availableQuestions = response.data.suggested_questions;
+                }
 
                 // Jika user belum melakukan tes kepribadian
                 if (response.data.needs_personality_test) {
@@ -166,6 +158,29 @@ export default {
             this.chatHistory = [];
         },
 
+        async loadChatHistory() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+
+                const response = await axios.get(
+                    'http://localhost:8000/api/chatbot/history',
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+
+                this.chatHistory = response.data.map(item => ({
+                    sender: item.sender,
+                    message: item.message
+                }));
+            } catch (error) {
+                console.error('Error loading chat history:', error);
+            }
+        },
+
         async loadAvailableQuestions() {
             try {
                 const token = localStorage.getItem('token');
@@ -192,6 +207,7 @@ export default {
     },
     mounted() {
         this.scrollToBottom();
+        this.loadChatHistory();
         this.loadAvailableQuestions();
     }
 };
