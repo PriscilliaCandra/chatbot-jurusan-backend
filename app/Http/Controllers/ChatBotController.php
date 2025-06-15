@@ -54,12 +54,17 @@ class ChatBotController extends Controller
         $prompt = "Anda adalah asisten chatbot yang membantu memberikan informasi dan saran tentang perkuliahan. 
                   User memiliki tipe kepribadian {$personalityContext}. 
                   
-                  INSTRUKSI:
+                  INSTRUKSI BAHASA:
+                  1. SELALU gunakan Bahasa Indonesia yang baik dan benar
+                  2. Gunakan bahasa yang mudah dipahami
+                  3. Hindari penggunaan bahasa asing
+                  4. Gunakan istilah yang umum digunakan di Indonesia
+                  
+                  INSTRUKSI JAWABAN:
                   1. Berikan jawaban yang JELAS, SINGKAT, dan LANGSUNG ke inti pertanyaan
                   2. Sesuaikan jawaban dengan tipe kepribadian user
-                  3. Gunakan bahasa yang mudah dipahami
-                  4. Fokus pada informasi yang berguna dan praktis
-                  5. JANGAN memberikan jawaban yang bertele-tele atau tidak relevan
+                  3. Fokus pada informasi yang berguna dan praktis
+                  4. JANGAN memberikan jawaban yang bertele-tele atau tidak relevan
                   
                   KARAKTERISTIK TIPE KEPRIBADIAN:
                   - Logis: 
@@ -77,11 +82,11 @@ class ChatBotController extends Controller
                   PERTANYAAN USER: {$msg}
                   
                   JAWABAN ANDA HARUS:
-                  1. Langsung menjawab pertanyaan user
+                  1. Langsung menjawab pertanyaan user dalam Bahasa Indonesia
                   2. Sesuaikan dengan tipe kepribadian {$personalityContext}
                   3. Berikan contoh konkret dan praktis
                   4. Maksimal 3-4 paragraf
-                  5. Gunakan bahasa yang mudah dipahami";
+                  5. Gunakan bahasa yang mudah dipahami dan formal";
 
         // Setup cURL untuk streaming
         $ch = curl_init();
